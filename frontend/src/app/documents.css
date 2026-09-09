@@ -1,0 +1,67 @@
+@font-face { font-family: "PowerManage Document"; src: url("/fonts/NotoSans-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "PowerManage Document"; src: url("/fonts/NotoSans-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+/* Document tokens intentionally remain independent of the app theme. */
+.document-preview { min-width: 0; }
+.document-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0 auto 20px; max-width: 794px; }
+.document-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.document-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--input-border); font-size: 14px; }
+.document-actions button:disabled { opacity: .6; cursor: wait; }
+.document-export-error { color: #b42330; margin-bottom: 16px; }
+.billing-document { box-sizing: border-box; --text-primary: #202936; --text-secondary: #535f6b; --border: #dce1e5; color-scheme: light; width: 100%; max-width: 794px; margin: 0 auto; padding: 36px; background: #fff; color: #202936; border: 1px solid #dce1e5; font: 14px/1.5 "PowerManage Document", ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+.billing-document * { box-sizing: border-box; }
+.document-header { display: flex; justify-content: space-between; gap: 24px; padding: 20px 0 24px; border-top: 3px solid #d63340; border-bottom: 1px solid #dce1e5; background: #fff; }
+.document-brand { margin: 0; color: #d63340; font-size: 26px; font-weight: 700; letter-spacing: -.03em; }
+.document-subtitle { margin: 5px 0 0; color: #535f6b; font-size: 12px; }
+.document-heading { text-align: right; }
+.document-heading h1 { margin: 0 0 12px; font-size: 23px; line-height: 1.25; font-weight: 700; }
+.document-status { display: inline-flex; padding: 5px 12px; border-radius: 999px; background: #fff1d6; color: #805500; font-size: 12px; font-weight: 700; }
+.document-status-paid { background: #e5f4eb; color: #12673a; }
+.document-status-overdue { background: #fce9eb; color: #b42330; }
+.document-status-void { background: #edf0f2; color: #535f6b; }
+.document-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px 28px; margin: 0; padding: 20px 0; }
+.document-grid > div { min-width: 0; }
+.document-grid dt { color: #535f6b; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.document-grid dd { margin: 5px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.document-section { border-top: 1px solid #dce1e5; padding-top: 16px; break-inside: avoid; }
+.billing-document h2 { margin: 0; font-size: 11px; color: #535f6b; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+.document-readings { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.document-readings dd { font-size: 18px; }
+.document-rows { margin: 0; padding: 12px 0; }
+.document-rows > div { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.3fr); gap: 16px; padding: 7px 0; break-inside: avoid; }
+.document-rows dt { color: #535f6b; }
+.document-rows dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.document-summary { border-top: 1px solid #dce1e5; padding-top: 16px; break-inside: avoid; }
+.document-rows .document-total { margin-top: 12px; padding: 16px; background: #f6f8f9; border: 1px solid #dce1e5; align-items: center; }
+.document-total dt { color: #202936; font-weight: 700; }
+.document-total dd { color: #d63340; font-size: 26px; line-height: 1.3; }
+.document-disclaimer { padding: 14px 16px; margin: 12px 0 0; background: #f6f8f9; border-left: 3px solid #8794a0; color: #46525e; font-size: 12px; break-inside: avoid; }
+.document-footer { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid #dce1e5; padding-top: 16px; margin-top: 24px; color: #535f6b; font-size: 10px; }
+.document-footer span { text-align: right; max-width: 55%; }
+@media screen and (max-width: 600px) {
+  .billing-document { padding: 18px 14px; }
+  .document-header { flex-direction: column; gap: 16px; }
+  .document-heading { text-align: left; }
+  .document-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .document-readings { grid-template-columns: minmax(0,1fr); }
+  .document-readings > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .document-readings dd { text-align: right; }
+  .document-total dd { font-size: 22px; }
+  .document-actions, .document-actions > div { width: 100%; }
+  .document-actions button { flex: 1 1 auto; }
+}
+@page { size: A4; margin: 12mm; }
+@media print {
+  /* Remove siblings at every ancestor, rather than visibility:hidden (which leaves whitespace). */
+  body:has(.billing-document) *:not(:has(.billing-document)):not(.billing-document):not(.billing-document *) { display: none !important; }
+  html:has(.billing-document), body:has(.billing-document), body *:has(.billing-document) {
+    display: block !important; position: static !important; overflow: visible !important; transform: none !important;
+    width: auto !important; max-width: none !important; height: auto !important; min-height: 0 !important; max-height: none !important;
+    margin: 0 !important; padding: 0 !important; border: 0 !important; background: #fff !important; box-shadow: none !important; backdrop-filter: none !important;
+  }
+  .billing-document { max-width: none; width: 100%; margin: 0; padding: 0; border: 0; font-size: 10pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .document-header { break-inside: avoid; }
+  .document-grid { break-inside: avoid; }
+  .document-actions { display: none !important; }
+}
+
+.billing-document[data-kind="receipt"] .document-total dd { color: #12673a; }

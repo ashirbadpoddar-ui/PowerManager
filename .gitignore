@@ -1,0 +1,111 @@
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Node / Next.js
+# =========================
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Python / FastAPI
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# =========================
+# Temporary files
+# =========================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# =========================
+# Review / Agent generated
+# =========================
+.full-review/
+.security-review/
+FULL_CODE_REVIEW.md
+SECURITY_REVIEW.md
+brain.md
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Keep important docs
+# =========================
+!README.md
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.eslintcache
+.turbo/
+frontend/.turbo/
+frontend/.vercel/
+test-results/
+playwright-report/
+blob-report/
+*.tsbuildinfo
+
+# Generated reviews and temporary artifacts
+.full-review/
+.security-review/
+tmp/
+frontend/output/
+
+# Markdown / generated documentation
+*.md
+!README.md
+!brain.md
+!electricity-bill-calculator/README.md
+!electricity-bill-calculator/DESIGN.md
+!electricity-bill-calculator/SMTP_NOTIFICATIONS.md
+!frontend/DESIGN-MAPPING.md

@@ -1,0 +1,19 @@
+{
+  "slabs": [
+    {
+      "min_units": 0,
+      "max_units": 100,
+      "rate_per_unit": 5.0
+    },
+    {
+      "min_units": 100,
+      "max_units": 200,
+      "rate_per_unit": 7.5
+    },
+    {
+      "min_units": 200,
+      "max_units": null,
+      "rate_per_unit": 10.0
+    }
+  ]
+}

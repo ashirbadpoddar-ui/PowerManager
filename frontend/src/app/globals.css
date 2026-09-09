@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --primary: #fe6e00;
+  --primary-hover: #b55e1f;
+  --accent: #ffb74d;
+  --secondary: #797067;
+  --blue-accent: #d1d5dc;
+  --focus-ring: rgba(86, 74, 66, 0.3);
+  --background: #fcfaf7;
+  --surface: #f3f4f6;
+  --card: #ffffff;
+  --card-secondary: #f3f4f6;
+  --text-primary: #423d38;
+  --text-secondary: #797067;
+  --text-muted: #797067;
+  --border: #e3e0dd;
+  --input-border: #d1d5dc;
+  --active-bg: rgba(254,110,0,.08);
+  --subtle-teal: #edebe9;
+  --hover-bg: #edebe9;
+  --success: #00c758;
+  --success-bg: #dcfce7;
+  --success-text: #016630;
+  --warning: #874b00;
+  --warning-bg: #fef9c2;
+  --error: #fb2c36;
+  --error-bg: #fee2e2;
+  --panel-dark: #423d38;
+  --panel-dark-hover: rgba(255,255,255,.1);
+  --on-dark-muted: #ffb74d;
+  --sidebar-panel: rgba(0,0,0,.7);
+  --sidebar-muted: rgba(255,255,255,.7);
+  --chart-fill: rgba(254,110,0,.6);
+  --shadow-card: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-premium: 0 4px 12px rgba(0,0,0,.12);
+  --shadow-dialog: 0 20px 25px rgba(0,0,0,.1), 0 8px 10px rgba(0,0,0,.04);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #413830;
+  --surface: #4a423a;
+  --card: #4a423a;
+  --card-secondary: #413830;
+  --text-primary: #fafaf9;
+  --text-secondary: #b9b3ac;
+  --text-muted: #b9b3ac;
+  --border: #62594f;
+  --input-border: #797067;
+  --subtle-teal: #413830;
+  --hover-bg: #62594f;
+  --success-bg: #203e2b;
+  --success-text: #a5e5ba;
+  --warning-bg: #4b3c20;
+  --warning: #ffb74d;
+  --error-bg: #542c2c;
+}
+
+html {
+  scroll-behavior: smooth;
+  max-width: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--background);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: var(--text-primary);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+/* Legacy utility aliases keep every existing screen on the same surface tokens. */
+.bg-white { background-color: var(--card); }
+input, select, textarea { background-color: var(--card); color: var(--text-primary); }
+
+.dashboard-card {
+  transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--input-border);
+    box-shadow: var(--shadow-premium);
+    will-change: transform, box-shadow;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-card {
+    transition: none;
+  }
+
+  .dashboard-card:hover {
+    transform: none;
+  }
+}
+
+.focus\:ring-\[var\(--active-bg\)\]:focus,
+.focus-visible\:ring-\[var\(--active-bg\)\]:focus-visible {
+  --tw-ring-color: var(--focus-ring) !important;
+}
+
+/* Shell tokens are scoped so menus and workspace surfaces retain their own contrast. */
+.app-shell {
+  --text-primary: #fff;
+  --text-secondary: rgba(255,255,255,.7);
+  --text-muted: rgba(255,255,255,.7);
+  --border: rgba(255,255,255,.1);
+  --hover-bg: rgba(255,255,255,.1);
+  --subtle-teal: rgba(255,255,255,.08);
+  color: #fff;
+  background: var(--sidebar-panel);
+  backdrop-filter: blur(12px);
+}
+.shell-popover {
+  --text-primary: #423d38;
+  --text-secondary: #797067;
+  --text-muted: #797067;
+  --border: #e3e0dd;
+  --hover-bg: #edebe9;
+  --card: #fff;
+  color: var(--text-primary);
+}
+.app-header { min-height: 64px; }
+.workspace { overflow-wrap: anywhere; }
+.workspace > * { min-width: 0; }
+h1 { letter-spacing: -.025em; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button { transition-duration: 150ms; }
+button:focus-visible, a:focus-visible { outline: 2px solid #f97015; outline-offset: 3px; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { min-width: 0; max-width: 100%; border-radius: 6px; }
+button:not(.rounded-full) { border-radius: 8px; }
+button[class*="bg-[var(--primary)]"] { border-radius: 6px; }
+table { width: 100%; font-size: .875rem; }
+thead { background: var(--card-secondary); }
+th { height: 48px; font-size: .75rem; font-weight: 600; letter-spacing: .05em; }
+td { padding-top: 8px; padding-bottom: 8px; }
+tbody tr { border-color: var(--border); }
+tbody tr:hover { background: var(--active-bg); }
+[role="dialog"] { max-height: calc(100dvh - 32px); overflow-y: auto; box-shadow: var(--shadow-dialog); }
+[role="alert"], [role="status"] { border-radius: 8px; }
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
+  button, select { min-height: 44px; }
+  .app-header { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: .01ms !important; }
+}
+
+.app-header input { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.1); color: #fff; }
+.app-header input::placeholder { color: rgba(255,255,255,.7); }
+.shell-popover { background-color: var(--card); }
