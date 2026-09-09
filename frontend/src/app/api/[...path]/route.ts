@@ -42,7 +42,7 @@ function copyResponseHeaders(response: Response): Headers {
 async function proxy(request: Request, { params }: RouteContext): Promise<Response> {
   const { path } = await params;
   const incomingUrl = new URL(request.url);
-  const targetUrl = new URL(`/${path.map(encodeURIComponent).join("/")}`, `${backendUrl}/`);
+  const targetUrl = new URL(`/api/${path.map(encodeURIComponent).join("/")}`, `${backendUrl}/`);
   targetUrl.search = incomingUrl.search;
   const isBodylessMethod = request.method === "GET" || request.method === "HEAD";
 
