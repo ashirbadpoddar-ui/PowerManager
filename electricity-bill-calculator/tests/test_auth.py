@@ -16,6 +16,14 @@ from app.services.auth_service import SessionCredentials, set_auth_cookies
 from tests.conftest import SessionLocal, session_row_for_client
 
 
+def test_bootstrap_status_uses_exactly_one_auth_prefix(client: TestClient) -> None:
+    response = client.get("/api/auth/bootstrap-status", follow_redirects=False)
+    assert response.status_code == 200
+    assert response.json() == {"setup_required": True}
+    assert client.get("/bootstrap-status").status_code == 404
+    assert client.get("/api/auth/api/auth/bootstrap-status").status_code == 404
+
+
 def test_atomic_bootstrap_creates_exactly_one_administrator(client: TestClient) -> None:
     assert client.get("/api/auth/bootstrap-status").json() == {"setup_required": True}
     invalid = client.post(
