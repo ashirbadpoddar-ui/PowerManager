@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import re
+import smtplib
+import ssl
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -18,6 +21,54 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 notification_logger = logging.getLogger("uvicorn.error.notifications")
+
+# SMTP libraries can include a recipient, credentials, or a connection URI in
+# an exception message. Render logs are operationally useful, but must never
+# become a source of credentials or personal data.
+_EMAIL_ADDRESS_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+_URI_CREDENTIAL_PATTERN = re.compile(r"([a-z][a-z0-9+.-]*://)([^\s:/@]+):([^\s/@]+)@", re.IGNORECASE)
+_SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
+    r"\b(mail[_ -]?password|password|app[_ -]?password|bootstrap[_ -]?token|"
+    r"session(?:[_ -]?(?:cookie|token))?|cookie|database(?:[_ -]?(?:url|password))?|"
+    r"authorization|api[_ -]?key|secret)\b\s*(?:=|:)\s*([^\s,;]+)",
+    re.IGNORECASE,
+)
+_SENSITIVE_TOKEN_PATTERN = re.compile(r"\b(?:secret|password|token|credential)[-_][A-Z0-9_-]+\b", re.IGNORECASE)
+
+
+def _safe_exception_detail(error: BaseException) -> str:
+    """Return an actionable exception message with sensitive values removed."""
+    detail = str(error).strip() or "no exception message"
+    detail = _URI_CREDENTIAL_PATTERN.sub(r"\1<redacted>:<redacted>@", detail)
+    detail = _SENSITIVE_ASSIGNMENT_PATTERN.sub(lambda match: f"{match.group(1)}=<redacted>", detail)
+    detail = _SENSITIVE_TOKEN_PATTERN.sub("<redacted>", detail)
+    detail = _EMAIL_ADDRESS_PATTERN.sub("<email-redacted>", detail)
+    return detail[:500]
+
+
+def _smtp_failure_category(error: BaseException) -> str:
+    if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
+        return "smtp_timeout"
+    if isinstance(error, smtplib.SMTPAuthenticationError):
+        return "smtp_authentication_failed"
+    if isinstance(error, smtplib.SMTPRecipientsRefused):
+        return "smtp_recipient_rejected"
+    if isinstance(error, ssl.SSLError):
+        return "smtp_tls_error"
+    if isinstance(error, (ConnectionRefusedError, ConnectionError, OSError)):
+        return "smtp_connection_failed"
+    return "smtp_send_failed"
+
+
+def _log_email_exception(event: str, error: BaseException, *, category: str | None = None) -> None:
+    """Log a useful SMTP failure without emitting an unsafe raw traceback."""
+    notification_logger.error(
+        "%s category=%s exception_type=%s detail=%s",
+        event,
+        category or _smtp_failure_category(error),
+        type(error).__name__,
+        _safe_exception_detail(error),
+    )
 
 class EmailSchema(BaseModel):
     email: List[EmailStr]
@@ -68,11 +119,13 @@ class ReminderEmailData:
 
 
 def log_notification_failure(kind: str, invoice_id: object, error: Exception) -> None:
-    # Third-party exceptions can embed SMTP passwords or message bodies. Keep
-    # the exception category and invoice correlation without the unsafe text.
-    safe = RuntimeError(f"Notification failed ({type(error).__name__})")
-    notification_logger.exception("%s_email_failed invoice_id=%s", kind, invoice_id,
-                                  exc_info=(RuntimeError, safe, None))
+    notification_logger.error(
+        "%s_email_failed invoice_id=%s status=failed exception_type=%s detail=%s",
+        kind,
+        invoice_id,
+        type(error).__name__,
+        _safe_exception_detail(error),
+    )
 
 
 async def deliver_notification(
@@ -136,8 +189,12 @@ def _connection_config() -> ConnectionConfig | None:
             TIMEOUT=10,
             MAIL_DEBUG=0,
         )
-    except Exception:
-        logger.warning("Email configuration is invalid.")
+    except Exception as error:
+        _log_email_exception(
+            "fastapi_mail_configuration_failed",
+            error,
+            category="fastapi_mail_configuration_error",
+        )
         return None
 
 
@@ -160,9 +217,8 @@ async def send_email(receiver_email: str | None, subject: str, html_body: str) -
         await asyncio.wait_for(FastMail(config).send_message(message), timeout=15)
         logger.info("Email notification sent.")
         return True
-    except Exception:
-        # SMTP/validation exceptions may contain credentials or message contents.
-        logger.warning("Email notification failed.")
+    except Exception as error:
+        _log_email_exception("email_notification_failed", error)
         return False
 
 
@@ -172,7 +228,8 @@ def email_notification_available(receiver_email: str | None) -> bool:
     try:
         MessageSchema(subject="Invoice", recipients=[receiver_email], body="", subtype=MessageType.html)
         return True
-    except Exception:
+    except Exception as error:
+        _log_email_exception("email_recipient_validation_failed", error, category="smtp_recipient_rejected")
         return False
 
 

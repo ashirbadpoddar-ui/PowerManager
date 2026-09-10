@@ -1,4 +1,5 @@
 import asyncio
+import smtplib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi_mail import MessageType
@@ -69,7 +70,9 @@ def test_fastapi_mail_failure_returns_false_and_logs_without_raising(monkeypatch
     fast_mail.send_message = AsyncMock(side_effect=RuntimeError("SMTP unavailable"))
     with patch("app.services.email_service.FastMail", return_value=fast_mail):
         assert asyncio.run(send_email("rahul@example.com", "Subject", "<p>Body</p>")) is False
-    assert "Email notification failed." in caplog.text
+    assert "email_notification_failed" in caplog.text
+    assert "smtp_send_failed" in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 def test_invoice_email_formats_values_cleanly(monkeypatch):
@@ -132,6 +135,20 @@ def test_timeout_and_sensitive_exception_are_safe(monkeypatch, caplog):
         assert asyncio.run(send_email("rahul@example.com", "Subject", "Body")) is False
     assert "secret-password" not in caplog.text
     assert "recipient@example.com" not in caplog.text
+    assert "smtp_timeout" in caplog.text
+    assert "TimeoutError" in caplog.text
+
+
+def test_smtp_failure_categories_are_logged_without_sensitive_details(monkeypatch, caplog):
+    configure_email(monkeypatch)
+    failure = smtplib.SMTPAuthenticationError(535, b"MAIL_PASSWORD=secret-password")
+    with patch("app.services.email_service.FastMail.send_message", new=AsyncMock(side_effect=failure)):
+        assert asyncio.run(send_email("rahul@example.com", "Subject", "Body")) is False
+
+    assert "smtp_authentication_failed" in caplog.text
+    assert "SMTPAuthenticationError" in caplog.text
+    assert "MAIL_PASSWORD=<redacted>" in caplog.text
+    assert "secret-password" not in caplog.text
 
 
 def test_invalid_config_and_recipient_are_unavailable(monkeypatch, caplog):
