@@ -1,4 +1,24 @@
-# Local invoice email setup
+# PowerManage email delivery
+
+## Production on Render Free
+
+Render Free blocks outbound SMTP ports, so production sends through the
+[Resend HTTPS Email API](https://resend.com/docs/api-reference/emails/send-email)
+on port 443. Create a Resend API key, verify the sending domain, and configure
+these **backend-only** Render environment variables:
+
+```dotenv
+EMAIL_API_KEY=re_your_resend_api_key
+EMAIL_FROM=notifications@your-verified-domain.example
+EMAIL_FROM_NAME=PowerManage
+```
+
+Do not add `EMAIL_API_KEY` to Vercel or expose it through a `NEXT_PUBLIC_`
+variable. In production, the backend will not fall back to SMTP when this API
+configuration is missing; notification delivery is reported as unavailable but
+invoice and payment work still complete.
+
+## Local SMTP fallback
 
 The backend local `.env` has been configured for the requested Gmail account.
 The password is only in that ignored file; never copy it into source, logs,
@@ -41,8 +61,9 @@ npm.cmd run dev
 ```
 
 Sign in as an administrator, assign a user account to the property submitter,
-and generate an invoice. This operation schedules an actual email when SMTP is
-configured. Automated tests always mock SMTP; they never send real emails.
+and generate an invoice. This operation schedules an actual email when the
+selected transport is configured. Automated tests mock the transport; they
+never send real emails.
 
 ## Verification
 
@@ -66,19 +87,21 @@ main-meter and other unassigned invoices report unavailable; a recipient label
 is not an email address. No public email-sending endpoint was added.
 
 `scheduled` means a FastAPI background task was attached after database commit,
-not that Gmail accepted or delivered the message. Missing configuration or a
+not that the provider accepted or delivered the message. Missing configuration or a
 recipient yields `not_available`. Detailed idempotent replays return existing
 invoices with no new notification status or task. Submitter duplicates retain
-HTTP 409 behavior. SMTP failures do not roll back saved invoices.
+HTTP 409 behavior. Email transport failures do not roll back saved invoices.
 
 Tasks receive an immutable dataclass of plain values, never a database session
-or ORM instance. SMTP has a 10-second connection timeout and a 15-second overall
-deadline. Logs omit SMTP exception details and recipient addresses.
+or ORM instance. The HTTPS provider has a 10-second connection timeout and a
+15-second overall deadline. Logs include a safe failure category, exception
+type, and redacted detail; they never include API keys, SMTP passwords, cookies,
+or bootstrap tokens.
 
 BackgroundTasks is not durable: a process crash/restart, including the gap after
 commit and before scheduling, can lose notifications. There is no retry queue,
 delivery tracking, or exactly-once delivery guarantee. A transactional outbox and
-durable worker would be needed for reliable retries. SMTP acceptance itself does
+durable worker would be needed for reliable retries. Provider acceptance itself does
 not prove inbox delivery. No deployment or production-data changes were made.
 
 ## Implementation verification results

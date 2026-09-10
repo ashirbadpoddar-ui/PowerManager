@@ -1,7 +1,9 @@
 import asyncio
+import json
 import smtplib
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 from fastapi_mail import MessageType
 
 from pydantic import SecretStr
@@ -20,6 +22,8 @@ from app.services.email_service import (
 
 
 def configure_email(monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "email_api_key", None)
     monkeypatch.setattr(settings, "email_host", "smtp.gmail.com")
     monkeypatch.setattr(settings, "email_port", 587)
     monkeypatch.setattr(settings, "email_username", "admin@example.com")
@@ -28,6 +32,13 @@ def configure_email(monkeypatch):
     monkeypatch.setattr(settings, "email_from_name", "PowerManage")
     monkeypatch.setattr(settings, "mail_starttls", True)
     monkeypatch.setattr(settings, "mail_ssl_tls", False)
+
+
+def configure_resend(monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "production")
+    monkeypatch.setattr(settings, "email_api_key", SecretStr("re_test_key"))
+    monkeypatch.setattr(settings, "email_from", "notifications@example.com")
+    monkeypatch.setattr(settings, "email_from_name", "PowerManage")
 
 
 def test_send_email_uses_fastapi_mail_and_never_exposes_password(monkeypatch):
@@ -49,6 +60,43 @@ def test_send_email_uses_fastapi_mail_and_never_exposes_password(monkeypatch):
     assert message.subtype is MessageType.html
     assert "<p>SMTP is working</p>" in message.body
     assert "test-app-password" not in str(message)
+
+
+def test_production_email_uses_resend_https_api(monkeypatch):
+    configure_resend(monkeypatch)
+    recorded = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded["request"] = request
+        return httpx.Response(201, json={"id": "email-id"})
+
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    with patch("app.services.email_service.httpx.AsyncClient", side_effect=lambda **_: real_client(transport=transport)):
+        assert asyncio.run(send_email("rahul@example.com", "Subject", "<p>Body</p>")) is True
+
+    request = recorded["request"]
+    assert request.url == httpx.URL("https://api.resend.com/emails")
+    assert request.headers["authorization"] == "Bearer re_test_key"
+    assert request.headers["user-agent"] == "PowerManage/1.0"
+    assert json.loads(request.content) == {
+        "from": "PowerManage <notifications@example.com>",
+        "to": ["rahul@example.com"],
+        "subject": "Subject",
+        "html": "<p>Body</p>",
+    }
+
+
+def test_resend_http_failure_returns_false_without_exposing_api_key(monkeypatch, caplog):
+    configure_resend(monkeypatch)
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda _: httpx.Response(403, json={"message": "invalid key"}))
+    with patch("app.services.email_service.httpx.AsyncClient", side_effect=lambda **_: real_client(transport=transport)):
+        assert asyncio.run(send_email("rahul@example.com", "Subject", "Body")) is False
+
+    assert "email_api_rejected" in caplog.text
+    assert "EmailApiResponseError" in caplog.text
+    assert "re_test_key" not in caplog.text
 
 
 def test_missing_credentials_and_recipient_do_not_attempt_fastapi_mail(monkeypatch, caplog):

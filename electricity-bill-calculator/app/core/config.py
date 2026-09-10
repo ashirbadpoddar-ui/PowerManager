@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     email_password: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MAIL_PASSWORD", "EMAIL_PASSWORD"))
     email_from: str | None = Field(default=None, validation_alias=AliasChoices("MAIL_FROM", "EMAIL_FROM"))
     email_from_name: str = Field(default="PowerManage", validation_alias=AliasChoices("MAIL_FROM_NAME", "EMAIL_FROM_NAME"))
+    email_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("EMAIL_API_KEY", "RESEND_API_KEY"))
     mail_starttls: bool = Field(default=True, validation_alias=AliasChoices("MAIL_STARTTLS"))
     mail_ssl_tls: bool = Field(default=False, validation_alias=AliasChoices("MAIL_SSL_TLS"))
     rate_limit_enabled: bool = False
@@ -89,6 +90,13 @@ class Settings(BaseSettings):
         return self.session_cookie_samesite or (
             "none" if self.app_env in {"staging", "production"} else "lax"
         )
+
+    @property
+    def email_transport(self) -> Literal["resend", "smtp"]:
+        """Use the HTTPS provider in production; SMTP is local-development only."""
+        if self.app_env in {"staging", "production"} or self.email_api_key is not None:
+            return "resend"
+        return "smtp"
 
     @property
     def cors_origin_list(self) -> list[str]:

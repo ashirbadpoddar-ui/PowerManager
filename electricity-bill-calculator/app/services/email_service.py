@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import List, cast
 from collections.abc import Awaitable, Callable
 
+import httpx
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, SecretStr
 
@@ -21,6 +22,14 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 notification_logger = logging.getLogger("uvicorn.error.notifications")
+RESEND_EMAILS_URL = "https://api.resend.com/emails"
+
+
+class EmailApiResponseError(RuntimeError):
+    """A deliberately detail-free error for a rejected provider response."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"Email API returned HTTP {status_code}")
 
 # SMTP libraries can include a recipient, credentials, or a connection URI in
 # an exception message. Render logs are operationally useful, but must never
@@ -60,12 +69,22 @@ def _smtp_failure_category(error: BaseException) -> str:
     return "smtp_send_failed"
 
 
+def _email_api_failure_category(error: BaseException) -> str:
+    if isinstance(error, (httpx.TimeoutException, asyncio.TimeoutError, TimeoutError)):
+        return "email_api_timeout"
+    if isinstance(error, httpx.RequestError):
+        return "email_api_connection_failed"
+    if isinstance(error, EmailApiResponseError):
+        return "email_api_rejected"
+    return "email_api_send_failed"
+
+
 def _log_email_exception(event: str, error: BaseException, *, category: str | None = None) -> None:
     """Log a useful SMTP failure without emitting an unsafe raw traceback."""
     notification_logger.error(
         "%s category=%s exception_type=%s detail=%s",
         event,
-        category or _smtp_failure_category(error),
+        category or (_email_api_failure_category(error) if settings.email_transport == "resend" else _smtp_failure_category(error)),
         type(error).__name__,
         _safe_exception_detail(error),
     )
@@ -169,6 +188,11 @@ def _smtp_is_configured() -> bool:
     return all(value and str(value).strip() for value in (settings.email_host, settings.email_username, password, settings.email_from))
 
 
+def _email_api_is_configured() -> bool:
+    api_key = settings.email_api_key.get_secret_value() if settings.email_api_key else ""
+    return bool(api_key.strip() and settings.email_from and settings.email_from.strip())
+
+
 def _connection_config() -> ConnectionConfig | None:
     if not _smtp_is_configured():
         logger.warning("Email credentials are not configured.")
@@ -199,10 +223,14 @@ def _connection_config() -> ConnectionConfig | None:
 
 
 async def send_email(receiver_email: str | None, subject: str, html_body: str) -> bool:
-    """Send HTML email through configured Gmail-compatible FastAPI-Mail SMTP."""
+    """Send HTML email with Resend HTTPS in production, SMTP only for local use."""
     if not receiver_email or not receiver_email.strip():
         logger.warning("No email address available for this user.")
         return False
+
+    if settings.email_transport == "resend":
+        return await _send_via_resend(receiver_email, subject, html_body)
+
     config = _connection_config()
     if config is None:
         return False
@@ -222,8 +250,48 @@ async def send_email(receiver_email: str | None, subject: str, html_body: str) -
         return False
 
 
+async def _send_via_resend(receiver_email: str, subject: str, html_body: str) -> bool:
+    """Deliver through Resend's HTTPS API; the API key never leaves the backend."""
+    if not _email_api_is_configured():
+        notification_logger.warning("Email API credentials are not configured.")
+        return False
+
+    api_key = settings.email_api_key.get_secret_value() if settings.email_api_key else ""
+    sender = settings.email_from or ""
+    if settings.email_from_name.strip():
+        sender = f"{settings.email_from_name.strip()} <{sender}>"
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=10.0)) as client:
+            response = await client.post(
+                RESEND_EMAILS_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "PowerManage/1.0",
+                },
+                json={
+                    "from": sender,
+                    "to": [receiver_email.strip()],
+                    "subject": subject,
+                    "html": html_body,
+                },
+            )
+        if not response.is_success:
+            raise EmailApiResponseError(response.status_code)
+        logger.info("Email notification sent.")
+        return True
+    except Exception as error:
+        _log_email_exception("email_notification_failed", error)
+        return False
+
+
 def email_notification_available(receiver_email: str | None) -> bool:
-    if not receiver_email or _connection_config() is None:
+    if not receiver_email:
+        return False
+    if settings.email_transport == "resend" and not _email_api_is_configured():
+        return False
+    if settings.email_transport == "smtp" and _connection_config() is None:
         return False
     try:
         MessageSchema(subject="Invoice", recipients=[receiver_email], body="", subtype=MessageType.html)
