@@ -11,7 +11,20 @@ function configuredApiUrl(): string | null {
  */
 export function getApiBaseUrl(): string {
   const apiUrl = configuredApiUrl();
-  if (apiUrl) return apiUrl;
+  if (apiUrl) {
+    const url = new URL(apiUrl);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error("NEXT_PUBLIC_API_URL must be an HTTP(S) origin without a path or credentials");
+    }
+    if (process.env.NODE_ENV === "production" && (
+      hostname === "localhost" || hostname.endsWith(".localhost") ||
+      hostname.startsWith("127.") || hostname === "[::1]" || hostname === "0.0.0.0"
+    )) {
+      throw new Error("NEXT_PUBLIC_API_URL must not use localhost or a loopback address in production");
+    }
+    return url.origin;
+  }
 
   if (process.env.NODE_ENV === "development") return LOCAL_API_URL;
 

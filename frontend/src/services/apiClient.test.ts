@@ -33,6 +33,23 @@ beforeEach(() => {
 });
 
 describe("apiRequest", () => {
+  it.each(["http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000"])("rejects production loopback configuration %s before fetching", async (origin) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", origin);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiRequest("/api/auth/bootstrap-status")).rejects.toThrow("must not use localhost");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows the local fallback only during development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    await apiRequest("/api/auth/bootstrap-status");
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/auth/bootstrap-status", expect.objectContaining({ credentials: "include" }));
+  });
   it("always sends credentials and copies the readable CSRF cookie to mutations", async () => {
     document.cookie = "powermanage_csrf=csrf-token-123; Path=/";
     const fetchMock = vi.fn().mockResolvedValue(mockResponse({ body: { saved: true } }));
