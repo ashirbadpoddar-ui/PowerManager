@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AUTH_EXPIRED_EVENT, apiRequest } from "@/services/apiClient";
 
@@ -24,9 +24,13 @@ function mockResponse({
 
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_API_URL", "https://powermananager.onrender.com");
+});
 
 describe("apiRequest", () => {
   it("always sends credentials and copies the readable CSRF cookie to mutations", async () => {
@@ -43,7 +47,7 @@ describe("apiRequest", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = new Headers(init.headers);
-    expect(url).toBe("/api/auth/me");
+    expect(url).toBe("https://powermananager.onrender.com/api/auth/me");
     expect(init.credentials).toBe("include");
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("X-CSRF-Token")).toBe("csrf-token-123");
@@ -61,23 +65,31 @@ describe("apiRequest", () => {
     expect(init.credentials).toBe("include");
   });
 
-  it("uses an explicitly configured public API URL when one is provided", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.test/");
+  it("uses the configured public API URL for bootstrap status", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse({ body: {} }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await apiRequest("/api/auth/me");
+    await apiRequest("/api/auth/bootstrap-status");
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.test/api/auth/me");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://powermananager.onrender.com/api/auth/bootstrap-status");
   });
 
-  it("explains how to restore the local proxy when a request cannot connect", async () => {
+  it("shows a user-friendly error when a request cannot connect", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
     await expect(apiRequest("/api/properties")).rejects.toMatchObject({
       status: 0,
-      message: expect.stringContaining("http://127.0.0.1:8000"),
+      message: "Unable to reach the PowerManage server. Please try again.",
     });
+  });
+
+  it("requires a configured public API URL outside development", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expect(apiRequest("/api/properties")).rejects.toThrow(
+      "NEXT_PUBLIC_API_URL is not configured",
+    );
   });
 
   it("emits the global session-expiry event for authenticated 401 responses", async () => {

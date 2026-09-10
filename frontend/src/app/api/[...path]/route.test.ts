@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 async function loadRoute() {
   vi.resetModules();
-  vi.stubEnv("BACKEND_URL", "http://127.0.0.1:8000");
+  vi.stubEnv("NEXT_PUBLIC_API_URL", "https://powermananager.onrender.com");
   return import("./route");
 }
 
@@ -11,7 +11,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("local API proxy", () => {
+describe("API proxy", () => {
   it("forwards the API path and query string to FastAPI", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ setup_required: false }), {
@@ -28,7 +28,7 @@ describe("local API proxy", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("http://127.0.0.1:8000/api/auth/bootstrap-status?source=test"),
+      new URL("https://powermananager.onrender.com/api/auth/bootstrap-status?source=test"),
       expect.objectContaining({ method: "GET" }),
     );
     expect(response.status).toBe(200);

@@ -1,13 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { calculateSimpleBill } from "@/services/electricityApi";
 
 describe("electricityApi", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://powermananager.onrender.com");
   });
 
-  it("uses the same same-origin proxy for simple calculations", async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the configured API URL for simple calculations", async () => {
     const response = {
       main_meter: {
         previous_reading: 100,
@@ -33,7 +38,7 @@ describe("electricityApi", () => {
     })).resolves.toEqual(response);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/electricity/simple-calculate",
+      "https://powermananager.onrender.com/api/electricity/simple-calculate",
       expect.objectContaining({
         method: "POST",
         credentials: "include",

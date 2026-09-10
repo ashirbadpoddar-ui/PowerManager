@@ -17,7 +17,7 @@ const securityHeaders = [
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
-      "connect-src 'self' https: http://localhost:8000 http://127.0.0.1:8000",
+      `connect-src 'self' https:${isProduction ? "" : " http://localhost:8000 http://127.0.0.1:8000"}`,
     ].join("; "),
   },
 ];

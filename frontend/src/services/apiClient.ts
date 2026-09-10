@@ -1,12 +1,10 @@
+import { getApiBaseUrl } from "@/lib/apiConfig";
+
 export const AUTH_EXPIRED_EVENT = "powermanage:auth-expired";
 
 type ApiRequestOptions = {
   notifyOnUnauthorized?: boolean;
 };
-
-function getApiBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -69,9 +67,10 @@ export async function apiRequest<T>(
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
   }
 
+  const apiBaseUrl = getApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${getApiBaseUrl()}${path}`, {
+    response = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       method,
       headers,
@@ -79,7 +78,7 @@ export async function apiRequest<T>(
     });
   } catch {
     throw new ApiError(
-      "Unable to reach the PowerManage server. Confirm the FastAPI backend is running at http://127.0.0.1:8000 and restart the frontend if its configuration changed.",
+      "Unable to reach the PowerManage server. Please try again.",
       0,
     );
   }

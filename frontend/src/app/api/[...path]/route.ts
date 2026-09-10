@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { getApiBaseUrl } from "@/lib/apiConfig";
 
-const backendUrl = (process.env.BACKEND_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 const hopByHopHeaders = new Set([
   "connection",
   "content-length",
@@ -40,9 +40,19 @@ function copyResponseHeaders(response: Response): Headers {
 }
 
 async function proxy(request: Request, { params }: RouteContext): Promise<Response> {
+  let backendUrl: string;
+  try {
+    backendUrl = getApiBaseUrl();
+  } catch {
+    return NextResponse.json(
+      { detail: "PowerManage API configuration is unavailable." },
+      { status: 500 },
+    );
+  }
+
   const { path } = await params;
   const incomingUrl = new URL(request.url);
-  const targetUrl = new URL(`${path.map(encodeURIComponent).join("/")}`, `${backendUrl}/`);
+  const targetUrl = new URL(`/api/${path.map(encodeURIComponent).join("/")}`, `${backendUrl}/`);
   targetUrl.search = incomingUrl.search;
   const isBodylessMethod = request.method === "GET" || request.method === "HEAD";
 
