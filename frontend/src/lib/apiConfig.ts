@@ -6,7 +6,7 @@ function configuredApiUrl(): string | null {
 }
 
 /**
- * Returns the sole API origin used by browser clients and the local proxy.
+ * Returns the upstream API origin used by the Next.js same-origin proxy.
  * A deployed application must explicitly provide NEXT_PUBLIC_API_URL.
  */
 export function getApiBaseUrl(): string {

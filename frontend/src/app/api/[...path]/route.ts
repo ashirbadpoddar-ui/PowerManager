@@ -4,6 +4,7 @@ import { getApiBaseUrl } from "@/lib/apiConfig";
 const hopByHopHeaders = new Set([
   "connection",
   "content-length",
+  "content-encoding",
   "host",
   "keep-alive",
   "proxy-authenticate",
@@ -24,6 +25,13 @@ type RouteContext = {
 function copyRequestHeaders(request: Request): Headers {
   const headers = new Headers(request.headers);
   for (const header of Array.from(hopByHopHeaders)) headers.delete(header);
+  // Do not forward unrelated cookies owned by the frontend host.
+  const cookies = (request.headers.get("cookie") ?? "").split(";")
+    .map((cookie) => cookie.trim())
+    .filter((cookie) => /^(powermanage_session|powermanage_csrf)=/.test(cookie));
+  headers.delete("cookie");
+  if (cookies.length) headers.set("cookie", cookies.join("; "));
+  headers.set("accept-encoding", "identity");
   return headers;
 }
 
@@ -36,6 +44,7 @@ function copyResponseHeaders(response: Response): Headers {
   const setCookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.()
     ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
   for (const cookie of setCookies) headers.append("set-cookie", cookie);
+  headers.set("Cache-Control", "no-store");
   return headers;
 }
 
@@ -52,6 +61,13 @@ async function proxy(request: Request, { params }: RouteContext): Promise<Respon
 
   const { path } = await params;
   const incomingUrl = new URL(request.url);
+  if (new URL(backendUrl).origin === incomingUrl.origin) {
+    return NextResponse.json({ detail: "API upstream must not point to the frontend." }, { status: 500 });
+  }
+  const origin = request.headers.get("origin");
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && origin && origin !== incomingUrl.origin) {
+    return NextResponse.json({ detail: "Untrusted request origin." }, { status: 403 });
+  }
   const targetUrl = new URL(`/api/${path.map(encodeURIComponent).join("/")}`, `${backendUrl}/`);
   targetUrl.search = incomingUrl.search;
   const isBodylessMethod = request.method === "GET" || request.method === "HEAD";

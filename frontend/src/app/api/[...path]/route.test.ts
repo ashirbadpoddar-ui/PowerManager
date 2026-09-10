@@ -12,6 +12,27 @@ afterEach(() => {
 });
 
 describe("API proxy", () => {
+  it("preserves secure session cookies and forwards them on session restore", async () => {
+    const upstreamHeaders = new Headers();
+    upstreamHeaders.append("Set-Cookie", "powermanage_session=opaque; Path=/; Secure; HttpOnly; SameSite=None");
+    upstreamHeaders.append("Set-Cookie", "powermanage_csrf=csrf; Path=/; Secure; SameSite=None");
+    upstreamHeaders.set("X-CSRF-Token", "csrf");
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response("{}", { headers: upstreamHeaders }))
+      .mockResolvedValueOnce(new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST, GET } = await loadRoute();
+    const login = await POST(new Request("https://frontend.example/api/auth/login", {
+      method: "POST", headers: { Origin: "https://frontend.example", "Content-Type": "application/json" }, body: "{}",
+    }), { params: Promise.resolve({ path: ["auth", "login"] }) });
+    expect(login.headers.getSetCookie()).toEqual(upstreamHeaders.getSetCookie());
+    expect(login.headers.get("cache-control")).toBe("no-store");
+    await GET(new Request("https://frontend.example/api/auth/me", {
+      headers: { Cookie: "powermanage_session=opaque; powermanage_csrf=csrf; unrelated=private" },
+    }), { params: Promise.resolve({ path: ["auth", "me"] }) });
+    const headers = fetchMock.mock.calls[1][1].headers as Headers;
+    expect(headers.get("cookie")).toBe("powermanage_session=opaque; powermanage_csrf=csrf");
+    expect(fetchMock.mock.calls[1][0].href).toBe("https://powermananager.onrender.com/api/auth/me");
+  });
   it("forwards the API path and query string to FastAPI", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ setup_required: false }), {

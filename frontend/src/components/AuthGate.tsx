@@ -2,7 +2,7 @@
 
 import { AlertCircle, Eye, EyeOff, RefreshCw, ShieldCheck, Zap } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AUTH_EXPIRED_EVENT, ApiError } from "@/services/apiClient";
 import {
@@ -220,6 +220,10 @@ function ForcedPasswordChange({ user, onSuccess }: { user: UserResponse; onSucce
   );
 }
 
+function SessionContent({ children, session }: { children: (session: AuthSession) => ReactNode; session: AuthSession }) {
+  return <>{children(session)}</>;
+}
+
 export function AuthGate({ children }: { children: (session: AuthSession) => ReactNode }) {
   const [mode, setMode] = useState<GateMode>("loading");
   const [user, setUser] = useState<UserResponse | null>(null);
@@ -227,12 +231,15 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   const [notice, setNotice] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setChecking(true);
     setRequestError(null);
     try {
       const status = await getBootstrapStatus();
+      if (generation !== loadGeneration.current) return;
       if (status.setup_required) {
         setDefaultName(window.localStorage.getItem(LEGACY_PROFILE_KEY)?.trim() ?? "");
         setUser(null);
@@ -242,9 +249,11 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
 
       try {
         const currentUser = await getCurrentUser(false);
+        if (generation !== loadGeneration.current) return;
         setUser(currentUser);
         setMode("authenticated");
       } catch (caught) {
+        if (generation !== loadGeneration.current) return;
         if (caught instanceof ApiError && caught.status === 401) {
           setUser(null);
           setMode("login");
@@ -253,27 +262,33 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
         throw caught;
       }
     } catch (caught) {
+      if (generation !== loadGeneration.current) return;
       console.error("PowerManage startup request failed", caught);
-      setRequestError(caught instanceof ApiError && caught.status === 0
-        ? "Unable to reach the server. Please try again."
-        : "Request failed. Please try again.");
+      setRequestError(caught instanceof ApiError && caught.status === 403
+        ? "You do not have permission to perform this action."
+        : "Unable to verify your session. Please try again.");
     } finally {
-      setChecking(false);
+      if (generation === loadGeneration.current) setChecking(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
     const handleExpired = () => {
+      loadGeneration.current += 1;
       setUser(null);
       setNotice("Your session has expired. Sign in again to continue.");
       setMode("login");
     };
     window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired);
-    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+    return () => {
+      loadGeneration.current += 1;
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+    };
   }, [load]);
 
   const acceptUser = (nextUser: UserResponse) => {
+    loadGeneration.current += 1;
     setRequestError(null);
     setNotice(null);
     setUser(nextUser);
@@ -310,5 +325,5 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   if (!user) return null;
   if (user.must_change_password) return <ForcedPasswordChange user={user} onSuccess={acceptUser} />;
 
-  return <><ErrorNotice message={requestError} />{children({ user, setUser: acceptUser, signOut })}</>;
+  return <><ErrorNotice message={requestError} /><SessionContent session={{ user, setUser: acceptUser, signOut }}>{children}</SessionContent></>;
 }

@@ -75,7 +75,7 @@ describe("AuthGate", () => {
   it("keeps startup visible on connection failure and retries into setup", async () => {
     vi.mocked(getBootstrapStatus).mockRejectedValueOnce(new ApiError("connection refused", 0));
     render(authenticatedChild());
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reach the server. Please try again.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to verify your session. Please try again.");
     expect(screen.getByRole("heading", { name: "Welcome to PowerManage" })).toBeInTheDocument();
     expect(screen.queryByText("PowerManage is unavailable")).not.toBeInTheDocument();
     vi.mocked(getBootstrapStatus).mockResolvedValue({ setup_required: true });

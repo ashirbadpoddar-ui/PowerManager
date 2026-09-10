@@ -38,7 +38,7 @@ describe("electricityApi", () => {
     })).resolves.toEqual(response);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://powermananager.onrender.com/api/electricity/simple-calculate",
+      "/api/electricity/simple-calculate",
       expect.objectContaining({
         method: "POST",
         credentials: "include",

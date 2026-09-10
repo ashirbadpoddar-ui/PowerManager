@@ -33,6 +33,22 @@ beforeEach(() => {
 });
 
 describe("apiRequest", () => {
+  it("ignores an older request's 401 after a successful login", async () => {
+    let finishOld!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>((resolve) => { finishOld = resolve; }))
+      .mockResolvedValueOnce(new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    const listener = vi.fn();
+    window.addEventListener(AUTH_EXPIRED_EVENT, listener);
+    try {
+      const old = apiRequest("/api/auth/me");
+      const failure = expect(old).rejects.toMatchObject({ status: 401 });
+      await apiRequest("/api/auth/login", { method: "POST" });
+      finishOld(new Response("{}", { status: 401 }));
+      await failure;
+      expect(listener).not.toHaveBeenCalled();
+    } finally { window.removeEventListener(AUTH_EXPIRED_EVENT, listener); }
+  });
   it("uses the exposed CSRF header when the API cookie is on another host", async () => {
     document.cookie = "powermanage_csrf=; Max-Age=0; Path=/";
     const fetchMock = vi.fn()
@@ -74,7 +90,7 @@ describe("apiRequest", () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse());
     vi.stubGlobal("fetch", fetchMock);
     await apiRequest("/api/auth/bootstrap-status");
-    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/auth/bootstrap-status", expect.objectContaining({ credentials: "include" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/bootstrap-status", expect.objectContaining({ credentials: "include" }));
   });
   it("always sends credentials and copies the readable CSRF cookie to mutations", async () => {
     document.cookie = "powermanage_csrf=csrf-token-123; Path=/";
@@ -90,7 +106,7 @@ describe("apiRequest", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = new Headers(init.headers);
-    expect(url).toBe("https://powermananager.onrender.com/api/auth/me");
+    expect(url).toBe("/api/auth/me");
     expect(init.credentials).toBe("include");
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("X-CSRF-Token")).toBe("csrf-token-123");
@@ -114,7 +130,7 @@ describe("apiRequest", () => {
 
     await apiRequest("/api/auth/bootstrap-status");
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://powermananager.onrender.com/api/auth/bootstrap-status");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/bootstrap-status");
   });
 
   it("shows a user-friendly error when a request cannot connect", async () => {

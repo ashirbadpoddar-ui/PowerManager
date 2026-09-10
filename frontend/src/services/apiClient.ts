@@ -2,6 +2,7 @@ import { getApiBaseUrl } from "@/lib/apiConfig";
 
 export const AUTH_EXPIRED_EVENT = "powermanage:auth-expired";
 let sessionCsrfToken: string | null = null;
+let sessionGeneration = 0;
 
 type ApiRequestOptions = {
   notifyOnUnauthorized?: boolean;
@@ -56,6 +57,8 @@ export async function apiRequest<T>(
   init: RequestInit = {},
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  const requestGeneration = sessionGeneration;
+  if (!path.startsWith("/api/")) throw new Error("API requests must use an /api/ path");
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
 
@@ -64,23 +67,26 @@ export async function apiRequest<T>(
   }
 
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const csrfToken = sessionCsrfToken ?? getCookie("powermanage_csrf");
+    const csrfToken = getCookie("powermanage_csrf") ?? sessionCsrfToken;
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
   }
 
-  const apiBaseUrl = getApiBaseUrl();
+  // Validate the configured upstream, but let the browser use first-party cookies.
+  // The Next.js /api proxy forwards this request to that upstream.
+  getApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}${path}`, {
+    response = await fetch(path, {
       ...init,
       method,
       headers,
       credentials: "include",
+      cache: "no-store",
     });
   } catch (cause) {
     console.error("PowerManage connection request failed", { method, path, cause });
     throw new ApiError(
-      "Unable to reach the server. Please try again.",
+      path === "/api/auth/me" ? "Unable to verify your session. Please try again." : "Unable to reach the server. Please try again.",
       0,
     );
   }
@@ -96,19 +102,21 @@ export async function apiRequest<T>(
 
     console.error("PowerManage API request failed", { method, path, status: response.status, details });
     const message = response.status >= 500
-      ? "Request failed. Please try again."
+      ? (path === "/api/auth/me" ? "Unable to verify your session. Please try again." : "Request failed. Please try again.")
       : response.status === 403
       ? "You do not have permission to perform this action."
       : formatValidationDetail(details) || response.statusText || "Request failed";
-    if (response.status === 401 && options.notifyOnUnauthorized !== false && typeof window !== "undefined") {
+    if (response.status === 401 && requestGeneration === sessionGeneration && options.notifyOnUnauthorized !== false && typeof window !== "undefined") {
       sessionCsrfToken = null;
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
     }
     throw new ApiError(message, response.status, details);
   }
 
+  const changesSession = method === "POST" && ["/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/auth/change-password"].includes(path);
   const csrfToken = response.headers?.get("X-CSRF-Token");
-  if (csrfToken) sessionCsrfToken = csrfToken;
+  if (csrfToken && (changesSession || requestGeneration === sessionGeneration)) sessionCsrfToken = csrfToken;
+  if (changesSession) sessionGeneration += 1;
   if (path === "/api/auth/logout") sessionCsrfToken = null;
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
