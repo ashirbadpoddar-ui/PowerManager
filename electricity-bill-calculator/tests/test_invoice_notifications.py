@@ -1,5 +1,5 @@
 from uuid import uuid4
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import settings
 from app.database.connection import SessionLocal
 from app.models.bill import Bill
+from app.services.email_service import EmailStatus
 from tests.test_bills import create_linked_detailed_submitters, METADATA
 
 
@@ -20,6 +21,64 @@ def payload_for(property_id, submitter_id):
         },
         "metadata": {k: v for k, v in METADATA.items() if k != "recipient_label"},
     }
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_invoice_sender_is_awaited_and_exception_does_not_break_commit(
+    client, bootstrap_admin, csrf_headers, create_managed_user, monkeypatch, caplog, failure,
+):
+    bootstrap_admin(client)
+    headers = csrf_headers(client)
+    property_id, submitters = create_linked_detailed_submitters(client, headers, create_managed_user, 1)
+    sender = AsyncMock(return_value=EmailStatus.SENT,
+                       side_effect=RuntimeError("MAIL_PASSWORD=must-not-log") if failure else None)
+    monkeypatch.setattr("app.routes.bills.send_invoice_email", sender)
+    response = client.post("/api/bills/detailed", headers=headers, json=payload_for(property_id, submitters[0]))
+    assert response.status_code == 201
+    sender.assert_awaited_once()
+    assert sender.await_args.args[0].user_email == "detailed-0@example.com"
+    assert "must-not-log" not in caplog.text
+    if failure:
+        assert "invoice_email_failed" in caplog.text
+
+
+@pytest.mark.parametrize("route", ["admin", "demo"])
+@pytest.mark.parametrize("outcome", ["success", "false", "exception"])
+def test_payment_notifies_assigned_user_after_commit(
+    client, bootstrap_admin, csrf_headers, create_managed_user, monkeypatch, caplog, route, outcome,
+):
+    bootstrap_admin(client)
+    headers = csrf_headers(client)
+    property_id, submitters = create_linked_detailed_submitters(client, headers, create_managed_user, 1)
+    generated = client.post("/api/bills/detailed", headers=headers, json=payload_for(property_id, submitters[0]))
+    assert generated.status_code == 201
+    invoice = next(item for item in generated.json()["invoices"] if item["submitter_id"])
+
+    async def sender(data):
+        with SessionLocal() as database:
+            assert database.get(Bill, invoice["id"]).status == "paid"
+        if outcome == "exception":
+            raise RuntimeError("MAIL_PASSWORD=must-not-log")
+        return EmailStatus.SENT if outcome == "success" else False
+
+    mocked = AsyncMock(side_effect=sender)
+    module = "app.routes.bills" if route == "admin" else "app.routes.my_account"
+    monkeypatch.setattr(f"{module}.send_payment_success_email", mocked)
+    if route == "demo":
+        assert client.post("/api/auth/login", json={"email": "detailed-0@example.com", "password": "TemporaryPassword1!"}).status_code == 200
+        assert client.post("/api/auth/change-password", headers=csrf_headers(client), json={
+            "current_password": "TemporaryPassword1!", "new_password": "PermanentPassword2!",
+        }).status_code == 200
+        response = client.post(f"/api/me/bills/{invoice['id']}/demo-payment", headers=csrf_headers(client), json={"payment_method": "upi"})
+    else:
+        response = client.post(f"/api/bills/{invoice['id']}/mark-paid", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "paid"
+    mocked.assert_awaited_once()
+    assert mocked.await_args.args[0].user_email == "detailed-0@example.com"
+    assert "must-not-log" not in caplog.text
+    if outcome != "success":
+        assert "payment_email_failed" in caplog.text
 
 
 @pytest.mark.parametrize("mode", ["success", "missing", "smtp_failure", "commit_failure"])

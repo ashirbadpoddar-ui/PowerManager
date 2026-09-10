@@ -34,7 +34,7 @@ from app.schemas.portal import (
     DemoPaymentRequest,
 )
 from app.services.billing_service import _bill_status, demo_pay_bill
-from app.services.email_service import PaymentEmailData, send_payment_success_email
+from app.services.email_service import PaymentEmailData, send_payment_success_email, deliver_notification, log_notification_failure
 from app.services.settings_service import get_tariff_settings
 
 
@@ -286,7 +286,7 @@ async def complete_demo_payment(
     db.refresh(bill)
     security_event("demo_payment_completed", user_id=user.id, resource_id=bill.id)
     try:
-        await send_payment_success_email(PaymentEmailData(
+        await deliver_notification(send_payment_success_email, PaymentEmailData(
             user_name=user.name,
             user_email=user.email,
             invoice_id=bill.bill_number,
@@ -294,9 +294,9 @@ async def complete_demo_payment(
             payment_method=bill.payment_method or payload.payment_method,
             transaction_id=bill.transaction_id or "Recorded payment",
             paid_at=bill.paid_at.isoformat() if bill.paid_at is not None else "Recorded payment",
-        ))
-    except Exception:
-        logger.exception("Payment succeeded, but email notification could not be sent.")
+        ), "payment")
+    except Exception as error:
+        log_notification_failure("payment", bill.id, error)
     return _serialize_bill(bill)
 
 

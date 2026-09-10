@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 from typing import List, cast
+from collections.abc import Awaitable, Callable
 
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, SecretStr
@@ -16,6 +17,7 @@ from pydantic import BaseModel, EmailStr, SecretStr
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+notification_logger = logging.getLogger("uvicorn.error.notifications")
 
 class EmailSchema(BaseModel):
     email: List[EmailStr]
@@ -63,6 +65,33 @@ class ReminderEmailData:
     amount: object
     due_date: str
     reminder_type: str
+
+
+def log_notification_failure(kind: str, invoice_id: object, error: Exception) -> None:
+    # Third-party exceptions can embed SMTP passwords or message bodies. Keep
+    # the exception category and invoice correlation without the unsafe text.
+    safe = RuntimeError(f"Notification failed ({type(error).__name__})")
+    notification_logger.exception("%s_email_failed invoice_id=%s", kind, invoice_id,
+                                  exc_info=(RuntimeError, safe, None))
+
+
+async def deliver_notification(
+    sender: Callable[..., Awaitable[EmailStatus | bool]],
+    data: InvoiceEmailData | PaymentEmailData,
+    kind: str,
+) -> EmailStatus:
+    notification_logger.info("%s_email_attempt invoice_id=%s recipient=%s", kind, data.invoice_id, data.user_email)
+    try:
+        result = await sender(data)
+    except Exception as error:
+        log_notification_failure(kind, data.invoice_id, error)
+        return EmailStatus.FAILED
+    if result is True or result == EmailStatus.SENT:
+        notification_logger.info("%s_email_sent invoice_id=%s", kind, data.invoice_id)
+        return EmailStatus.SENT
+    notification_logger.warning("%s_email_failed invoice_id=%s status=%s", kind, data.invoice_id,
+                                "not_available" if result == EmailStatus.NOT_AVAILABLE else "failed")
+    return EmailStatus.NOT_AVAILABLE if result == EmailStatus.NOT_AVAILABLE else EmailStatus.FAILED
 
 
 def _money(value: object) -> str:

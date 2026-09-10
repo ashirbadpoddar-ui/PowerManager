@@ -36,7 +36,11 @@ from app.services.billing_service import (
     void_bill,
     update_bill_due_date,
 )
-from app.services.email_service import EmailStatus, InvoiceEmailData, email_notification_available, send_invoice_email
+from app.services.email_service import (
+    EmailStatus, InvoiceEmailData, PaymentEmailData, deliver_notification,
+    email_notification_available, send_invoice_email, send_payment_success_email,
+    notification_logger, log_notification_failure,
+)
 
 
 router = APIRouter(prefix="/api/bills", tags=["bills"])
@@ -47,7 +51,11 @@ def _schedule_invoice_email(bill: Bill, tasks: BackgroundTasks) -> str:
     """Called after commit; the task receives only an immutable value snapshot."""
     try:
         recipient = bill.submitter.user if bill.submitter is not None else None
-        if recipient is None or not email_notification_available(recipient.email):
+        if recipient is None:
+            notification_logger.warning("invoice_email_skipped invoice_id=%s reason=no_assigned_user", bill.id)
+            return EmailStatus.NOT_AVAILABLE.value
+        if not email_notification_available(recipient.email):
+            notification_logger.warning("invoice_email_skipped invoice_id=%s reason=recipient_or_configuration_unavailable", bill.id)
             return EmailStatus.NOT_AVAILABLE.value
         snapshot = bill.result_snapshot or {}
         data = InvoiceEmailData(
@@ -59,10 +67,10 @@ def _schedule_invoice_email(bill: Bill, tasks: BackgroundTasks) -> str:
             rate=snapshot.get("rate_per_unit"), total_amount=bill.total_amount,
             due_date=str(bill.due_date),
         )
-        tasks.add_task(send_invoice_email, data)
+        tasks.add_task(deliver_notification, send_invoice_email, data, "invoice")
         return EmailStatus.SCHEDULED.value
-    except Exception:
-        logger.warning("Invoice saved; email notification unavailable.")
+    except Exception as error:
+        log_notification_failure("invoice", bill.id, error)
         return EmailStatus.NOT_AVAILABLE.value
 
 
@@ -100,6 +108,7 @@ def generate_simple_bill(
         security_event("invoice_generated", request=request, user_id=current_user.id, resource_id=bill.id)
         response = serialize_bill(bill)
         response.email_status = EmailStatus.NOT_AVAILABLE.value
+        notification_logger.warning("invoice_email_skipped invoice_id=%s reason=no_assigned_user", bill.id)
         return response
     except IntegrityError as exc:
         db.rollback()
@@ -228,7 +237,7 @@ def get_bill(
     response_model=BillResponse,
     dependencies=[Depends(rate_limit("payment-action", 20))],
 )
-def pay_bill(
+async def pay_bill(
     bill_id: int,
     request: Request,
     current_user: User = Depends(require_administrator_csrf),
@@ -238,6 +247,20 @@ def pay_bill(
     db.commit()
     db.refresh(bill)
     security_event("invoice_marked_paid", request=request, user_id=current_user.id, resource_id=bill.id)
+    try:
+        recipient = bill.submitter.user if bill.submitter is not None else None
+        if recipient is None:
+            notification_logger.warning("payment_email_skipped invoice_id=%s reason=no_assigned_user", bill.id)
+        else:
+            await deliver_notification(send_payment_success_email, PaymentEmailData(
+                user_name=recipient.name, user_email=recipient.email,
+                invoice_id=bill.bill_number, paid_amount=bill.total_amount,
+                payment_method=bill.payment_method or "Administrator recorded",
+                transaction_id=bill.transaction_id or "Recorded payment",
+                paid_at=bill.paid_at.isoformat() if bill.paid_at else "Recorded payment",
+            ), "payment")
+    except Exception as error:
+        log_notification_failure("payment", bill.id, error)
     return serialize_bill(bill)
 
 
