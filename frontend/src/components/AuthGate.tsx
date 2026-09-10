@@ -23,7 +23,7 @@ export type AuthSession = {
   signOut: () => Promise<void>;
 };
 
-type GateMode = "loading" | "bootstrap" | "login" | "authenticated" | "error";
+type GateMode = "loading" | "bootstrap" | "login" | "authenticated";
 
 function PasswordField({
   id,
@@ -225,11 +225,12 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   const [user, setUser] = useState<UserResponse | null>(null);
   const [defaultName, setDefaultName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const load = useCallback(async () => {
-    setMode("loading");
-    setFatalError(null);
+    setChecking(true);
+    setRequestError(null);
     try {
       const status = await getBootstrapStatus();
       if (status.setup_required) {
@@ -252,8 +253,12 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
         throw caught;
       }
     } catch (caught) {
-      setFatalError(caught instanceof Error ? caught.message : "Unable to load PowerManage.");
-      setMode("error");
+      console.error("PowerManage startup request failed", caught);
+      setRequestError(caught instanceof ApiError && caught.status === 0
+        ? "Unable to reach the server. Please try again."
+        : "Request failed. Please try again.");
+    } finally {
+      setChecking(false);
     }
   }, []);
 
@@ -287,11 +292,11 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   };
 
   if (mode === "loading") {
-    return <main className="grid min-h-screen place-items-center bg-[var(--background)] text-[var(--text-primary)]"><div className="text-center"><span className="mx-auto block h-9 w-9 animate-spin rounded-full border-4 border-[var(--border)] border-t-[var(--primary)]" /><p className="mt-4 text-sm font-semibold">Loading your workspace…</p></div></main>;
-  }
-
-  if (mode === "error") {
-    return <AuthShell eyebrow="Connection problem" title="PowerManage is unavailable" description={fatalError ?? "The application could not be loaded."}><button onClick={() => void load()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] text-sm font-bold text-white hover:bg-[var(--primary-hover)]"><RefreshCw className="h-4 w-4" />Try again</button></AuthShell>;
+    return <AuthShell eyebrow="Account access" title="Welcome to PowerManage" description="We’ll check your workspace to continue to sign-in or initial setup.">
+      {checking && <p role="status" className="mb-3 flex items-center gap-2 text-sm text-[var(--text-secondary)]"><RefreshCw className="h-4 w-4 animate-spin" />Loading your workspace…</p>}
+      <ErrorNotice message={requestError} />
+      <button type="button" disabled={checking} onClick={() => void load()} className="mt-3 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--primary)] disabled:opacity-60">{checking ? "Checking…" : "Try again"}</button>
+    </AuthShell>;
   }
 
   if (mode === "bootstrap") return <BootstrapForm defaultName={defaultName} onSuccess={acceptUser} />;

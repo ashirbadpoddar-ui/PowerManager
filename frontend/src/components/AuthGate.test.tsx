@@ -62,6 +62,28 @@ beforeEach(() => {
 
 
 describe("AuthGate", () => {
+  it("keeps startup visible on connection failure and retries into setup", async () => {
+    vi.mocked(getBootstrapStatus).mockRejectedValueOnce(new ApiError("connection refused", 0));
+    render(authenticatedChild());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reach the server. Please try again.");
+    expect(screen.getByRole("heading", { name: "Welcome to PowerManage" })).toBeInTheDocument();
+    expect(screen.queryByText("PowerManage is unavailable")).not.toBeInTheDocument();
+    vi.mocked(getBootstrapStatus).mockResolvedValue({ setup_required: true });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Create the first administrator" })).toBeInTheDocument();
+  });
+
+  it("keeps login inputs when the login request fails", async () => {
+    vi.mocked(getBootstrapStatus).mockResolvedValue({ setup_required: false });
+    vi.mocked(getCurrentUser).mockRejectedValue(new ApiError("Unauthorized", 401));
+    vi.mocked(login).mockRejectedValue(new ApiError("Unable to reach the server. Please try again.", 0));
+    render(authenticatedChild());
+    await screen.findByRole("heading", { name: "Welcome back" });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "alice@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reach the server");
+    expect(screen.getByLabelText("Email")).toHaveValue("alice@example.com");
+  });
   it("prefills and removes the legacy profile name during first-admin bootstrap", async () => {
     const browser = userEvent.setup();
     window.localStorage.setItem("powermanage-profile-name", "Legacy Administrator");

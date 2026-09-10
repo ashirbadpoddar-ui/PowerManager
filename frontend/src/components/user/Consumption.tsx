@@ -1,4 +1,5 @@
 "use client";
+import { RequestError } from "@/components/RequestError";
 
 import { BarChart3, LoaderCircle, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,7 +15,7 @@ export function Consumption() {
     void getMyConsumption().then((response) => { if (active) setData(response); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Unable to load your consumption history."); });
     return () => { active = false; };
   }, []);
-  if (error) return <div role="alert" className="rounded-xl border border-[var(--error)] bg-[var(--error-bg)] p-4 text-sm text-[var(--error)]">{error}</div>;
+  if (!data && error) return <section><h1>Your energy usage</h1><RequestError message={error} /></section>;
   if (!data) return <div className="grid min-h-[360px] place-items-center text-sm text-[var(--text-secondary)]"><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" /> Loading consumption…</div>;
   const increase = data.absolute_change >= 0;
   const max = Math.max(...data.history.map((point) => point.units), 1);

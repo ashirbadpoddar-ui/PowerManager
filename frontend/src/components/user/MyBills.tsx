@@ -1,4 +1,5 @@
 "use client";
+import { RequestError } from "@/components/RequestError";
 
 import { FileText, LoaderCircle, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -117,23 +118,25 @@ export function MyInvoiceDetail({ billId, onBack, onPay, onReceipt }: { billId: 
   const payments = useDemoPayments();
   const [bill, setBill] = useState<MyBill | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { let active = true; const load = () => { void getMyBill(billId).then((response) => { if (active) setBill(response); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Unable to load this invoice."); }); }; load(); window.addEventListener("powermanage-bill-change", load); return () => { active = false; window.removeEventListener("powermanage-bill-change", load); }; }, [billId]);
-  if (error) return <div role="alert" className="rounded-xl border border-[var(--error)] bg-[var(--error-bg)] p-4 text-sm text-[var(--error)]">{error}</div>;
+  useEffect(() => { let active = true; const load = () => { void getMyBill(billId).then((response) => { if (active) { setBill(response); setError(null); } }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Unable to load this invoice."); }); }; load(); window.addEventListener("powermanage-bill-change", load); return () => { active = false; window.removeEventListener("powermanage-bill-change", load); }; }, [billId]);
+  const requestNotice = <RequestError message={error} retry={() => window.dispatchEvent(new Event("powermanage-bill-change"))} />;
+  if (!bill && error) return <section><h1>Invoice</h1><button type="button" onClick={onBack}>Back to bills</button>{requestNotice}</section>;
   if (!bill) return <div className="grid min-h-[360px] place-items-center text-sm text-[var(--text-secondary)]"><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" /> Loading invoice…</div>;
 
   const payment = authoritativePayment(bill, payments[String(bill.id)]);
   const currentPaymentStatus = getEffectivePaymentStatus(bill, payment);
   const canPay = bill.status !== "paid" && currentPaymentStatus !== "paid";
-  return <><DocumentPreview bill={documentBill(bill)} kind="invoice" actions={<><button type="button" onClick={onBack}>Back to bills</button>{canPay && onPay && <button type="button" onClick={() => onPay(bill)}>Pay now</button>}{currentPaymentStatus === "paid" && onReceipt && <button type="button" onClick={() => onReceipt(bill.id)}>View receipt</button>}</>} />{currentPaymentStatus === "failed" && <p role="status" className="document-export-error">The last demo payment failed. You can try again.</p>}</>;
+  return <>{requestNotice}<DocumentPreview bill={documentBill(bill)} kind="invoice" actions={<><button type="button" onClick={onBack}>Back to bills</button>{canPay && onPay && <button type="button" onClick={() => onPay(bill)}>Pay now</button>}{currentPaymentStatus === "paid" && onReceipt && <button type="button" onClick={() => onReceipt(bill.id)}>View receipt</button>}</>} />{currentPaymentStatus === "failed" && <p role="status" className="document-export-error">The last demo payment failed. You can try again.</p>}</>;
 }
 
 export function MyReceiptDetail({ billId, onBack }: { billId: number; onBack: () => void }) {
   const payments = useDemoPayments();
   const [bill, setBill] = useState<MyBill | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { let active = true; const load = () => { void getMyBill(billId).then((response) => { if (active) setBill(response); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Unable to load this receipt."); }); }; load(); window.addEventListener("powermanage-bill-change", load); return () => { active = false; window.removeEventListener("powermanage-bill-change", load); }; }, [billId]);
-  if (error) return <div role="alert" className="rounded-xl border border-[var(--error)] bg-[var(--error-bg)] p-4 text-sm text-[var(--error)]">{error}</div>;
+  useEffect(() => { let active = true; const load = () => { void getMyBill(billId).then((response) => { if (active) { setBill(response); setError(null); } }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Unable to load this receipt."); }); }; load(); window.addEventListener("powermanage-bill-change", load); return () => { active = false; window.removeEventListener("powermanage-bill-change", load); }; }, [billId]);
+  const requestNotice = <RequestError message={error} retry={() => window.dispatchEvent(new Event("powermanage-bill-change"))} />;
+  if (!bill && error) return <section><h1>Receipt</h1><button type="button" onClick={onBack}>Back to bills</button>{requestNotice}</section>;
   if (!bill) return <div className="grid min-h-[360px] place-items-center text-sm text-[var(--text-secondary)]"><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" /> Loading receipt…</div>;
-  return <PaymentReceipt bill={bill} payment={payments[String(bill.id)] ?? null} onBack={onBack} />;
+  return <>{requestNotice}<PaymentReceipt bill={bill} payment={payments[String(bill.id)] ?? null} onBack={onBack} /></>;
 }
 

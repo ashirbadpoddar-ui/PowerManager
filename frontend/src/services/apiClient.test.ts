@@ -96,7 +96,7 @@ describe("apiRequest", () => {
 
     await expect(apiRequest("/api/properties")).rejects.toMatchObject({
       status: 0,
-      message: "Unable to reach the PowerManage server. Please try again.",
+      message: "Unable to reach the server. Please try again.",
     });
   });
 

@@ -76,9 +76,10 @@ export async function apiRequest<T>(
       headers,
       credentials: "include",
     });
-  } catch {
+  } catch (cause) {
+    console.error("PowerManage connection request failed", { method, path, cause });
     throw new ApiError(
-      "Unable to reach the PowerManage server. Please try again.",
+      "Unable to reach the server. Please try again.",
       0,
     );
   }
@@ -92,7 +93,10 @@ export async function apiRequest<T>(
       details = undefined;
     }
 
-    const message = response.status === 403
+    console.error("PowerManage API request failed", { method, path, status: response.status, details });
+    const message = response.status >= 500
+      ? "Request failed. Please try again."
+      : response.status === 403
       ? "You do not have permission to perform this action."
       : formatValidationDetail(details) || response.statusText || "Request failed";
     if (response.status === 401 && options.notifyOnUnauthorized !== false && typeof window !== "undefined") {
