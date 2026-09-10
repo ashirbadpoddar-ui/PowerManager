@@ -42,7 +42,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
-    expose_headers=["X-Request-ID"],
+    expose_headers=["X-Request-ID", "X-CSRF-Token"],
 )
 
 logger = logging.getLogger("powermanage.http")

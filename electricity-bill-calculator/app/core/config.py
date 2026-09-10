@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     session_ttl_hours: int = 168
     session_cookie_secure: bool = False
+    session_cookie_samesite: Literal["lax", "strict", "none"] | None = None
     email_host: str = Field(default="smtp.gmail.com", validation_alias=AliasChoices("MAIL_SERVER", "EMAIL_HOST"))
     email_port: int = Field(default=587, validation_alias=AliasChoices("MAIL_PORT", "EMAIL_PORT"))
     email_username: str | None = Field(default=None, validation_alias=AliasChoices("MAIL_USERNAME", "EMAIL_USERNAME"))
@@ -72,6 +73,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_deployment_security(self):
+        if self.effective_session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError("SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAMESITE=none")
         if self.app_env in {"staging", "production"}:
             if not self.session_cookie_secure:
                 raise ValueError("SESSION_COOKIE_SECURE must be true outside development")
@@ -80,6 +83,12 @@ class Settings(BaseSettings):
             if self.bootstrap_token is not None and len(self.bootstrap_token.get_secret_value()) < 32:
                 raise ValueError("BOOTSTRAP_TOKEN must contain at least 32 characters outside development")
         return self
+
+    @property
+    def effective_session_cookie_samesite(self) -> Literal["lax", "strict", "none"]:
+        return self.session_cookie_samesite or (
+            "none" if self.app_env in {"staging", "production"} else "lax"
+        )
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -62,6 +62,16 @@ beforeEach(() => {
 
 
 describe("AuthGate", () => {
+  it("keeps the session visible when logout cannot reach the server", async () => {
+    vi.mocked(getBootstrapStatus).mockResolvedValue({ setup_required: false });
+    vi.mocked(getCurrentUser).mockResolvedValue(admin);
+    vi.mocked(logout).mockRejectedValue(new ApiError("Network failure", 0));
+    render(authenticatedChild());
+    await screen.findByText("Authenticated as Alice Admin");
+    fireEvent.click(screen.getByRole("button", { name: "Test logout" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reach the server");
+    expect(screen.getByText("Authenticated as Alice Admin")).toBeInTheDocument();
+  });
   it("keeps startup visible on connection failure and retries into setup", async () => {
     vi.mocked(getBootstrapStatus).mockRejectedValueOnce(new ApiError("connection refused", 0));
     render(authenticatedChild());

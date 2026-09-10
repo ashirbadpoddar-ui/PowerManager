@@ -274,21 +274,27 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   }, [load]);
 
   const acceptUser = (nextUser: UserResponse) => {
+    setRequestError(null);
     setNotice(null);
     setUser(nextUser);
     setMode("authenticated");
   };
 
   const signOut = async () => {
+    setRequestError(null);
     try {
       await logout();
     } catch (caught) {
-      if (!(caught instanceof ApiError && caught.status === 401)) throw caught;
-    } finally {
-      setUser(null);
-      setNotice("You have signed out.");
-      setMode("login");
+      if (!(caught instanceof ApiError && caught.status === 401)) {
+        setRequestError(caught instanceof ApiError && caught.status === 0
+          ? "Unable to reach the server. Please try again."
+          : "Request failed. Please try again.");
+        return;
+      }
     }
+    setUser(null);
+    setNotice("You have signed out.");
+    setMode("login");
   };
 
   if (mode === "loading") {
@@ -304,5 +310,5 @@ export function AuthGate({ children }: { children: (session: AuthSession) => Rea
   if (!user) return null;
   if (user.must_change_password) return <ForcedPasswordChange user={user} onSuccess={acceptUser} />;
 
-  return <>{children({ user, setUser: acceptUser, signOut })}</>;
+  return <><ErrorNotice message={requestError} />{children({ user, setUser: acceptUser, signOut })}</>;
 }

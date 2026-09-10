@@ -1,6 +1,7 @@
 import { getApiBaseUrl } from "@/lib/apiConfig";
 
 export const AUTH_EXPIRED_EVENT = "powermanage:auth-expired";
+let sessionCsrfToken: string | null = null;
 
 type ApiRequestOptions = {
   notifyOnUnauthorized?: boolean;
@@ -63,7 +64,7 @@ export async function apiRequest<T>(
   }
 
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const csrfToken = getCookie("powermanage_csrf");
+    const csrfToken = sessionCsrfToken ?? getCookie("powermanage_csrf");
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
   }
 
@@ -100,11 +101,15 @@ export async function apiRequest<T>(
       ? "You do not have permission to perform this action."
       : formatValidationDetail(details) || response.statusText || "Request failed";
     if (response.status === 401 && options.notifyOnUnauthorized !== false && typeof window !== "undefined") {
+      sessionCsrfToken = null;
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
     }
     throw new ApiError(message, response.status, details);
   }
 
+  const csrfToken = response.headers?.get("X-CSRF-Token");
+  if (csrfToken) sessionCsrfToken = csrfToken;
+  if (path === "/api/auth/logout") sessionCsrfToken = null;
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

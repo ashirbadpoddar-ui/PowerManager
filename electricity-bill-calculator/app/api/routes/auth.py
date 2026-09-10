@@ -5,13 +5,14 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_auth_context, get_current_user, require_csrf
+from app.api.dependencies import get_auth_context, require_csrf
 from app.api.dependencies import AuthContext
 from app.core.config import settings
 from app.core.audit import security_event
 from app.core.rate_limit import rate_limit
 from app.core.security import (
     DUMMY_PASSWORD_HASH,
+    hash_token,
     hash_password,
     password_hash_needs_rehash,
     tokens_match,
@@ -29,6 +30,8 @@ from app.schemas.user import (
     UserResponse,
 )
 from app.services.auth_service import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
     clear_auth_cookies,
     create_user_session,
     revoke_user_sessions,
@@ -195,8 +198,12 @@ def login(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(user: User = Depends(get_current_user)) -> User:
-    return user
+def get_me(request: Request, response: Response, context: AuthContext = Depends(get_auth_context)) -> User:
+    # Restore the CSRF token after reload without exposing the HttpOnly session.
+    token = request.cookies.get(CSRF_COOKIE_NAME)
+    if token and tokens_match(hash_token(token), context.session.csrf_token_hash):
+        response.headers[CSRF_HEADER_NAME] = token
+    return context.user
 
 
 @router.patch("/me", response_model=UserResponse)

@@ -11,6 +11,25 @@ FastAPI backend for authenticated electricity-bill calculations, PostgreSQL-back
 
 ## Configuration
 
+For a Vercel frontend calling Render directly over HTTPS, set Render's
+`APP_ENV=production`, `SESSION_COOKIE_SECURE=true`,
+`SESSION_COOKIE_SAMESITE=none`, and `CORS_ORIGINS` to the exact frontend origin
+(scheme and hostname, without a path). Keep `RATE_LIMIT_ENABLED=true`.
+Do not configure a cookie Domain across the two hosts. Cookies stay host-only.
+`SameSite=None` is rejected unless Secure is enabled. Without an explicit
+SameSite setting, production/staging use `none` and local development uses `lax`.
+
+The HttpOnly session token is never exposed to JavaScript. Login, bootstrap,
+password rotation and GET `/api/auth/me` return `X-CSRF-Token`, exposed only to
+CORS-allowed origins. The frontend retains that CSRF token in memory and sends
+it on mutations; the backend still verifies it against both cookie and session.
+On reload, GET `/api/auth/me` restores the token. No localStorage is used.
+
+After deploying both services, sign in again and verify cookie storage and
+`/api/auth/me` in browser DevTools, including after 30 seconds and a page reload.
+Browsers blocking third-party cookies can still block this cross-site setup;
+use a same-origin proxy or same-site custom domains in that case.
+
 Copy `.env.example` to `.env` and set every environment-specific value. Never reuse the application database as the test database.
 
 | Variable | Purpose |

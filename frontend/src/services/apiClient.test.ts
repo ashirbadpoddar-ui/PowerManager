@@ -33,6 +33,32 @@ beforeEach(() => {
 });
 
 describe("apiRequest", () => {
+  it("uses the exposed CSRF header when the API cookie is on another host", async () => {
+    document.cookie = "powermanage_csrf=; Max-Age=0; Path=/";
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { headers: { "X-CSRF-Token": "cross-site-token" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await apiRequest("/api/auth/me");
+    await apiRequest("/api/auth/logout", { method: "POST" });
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(new Headers(init.headers).get("X-CSRF-Token")).toBe("cross-site-token");
+    expect(init.credentials).toBe("include");
+  });
+
+  it.each([0, 403, 503])("does not expire the session for failure status %s", async (status) => {
+    const listener = vi.fn();
+    window.addEventListener(AUTH_EXPIRED_EVENT, listener);
+    vi.stubGlobal("fetch", status === 0
+      ? vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))
+      : vi.fn().mockResolvedValue(new Response("{}", { status })));
+    try {
+      await expect(apiRequest("/api/auth/me")).rejects.toBeInstanceOf(Error);
+      expect(listener).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, listener);
+    }
+  });
   it.each(["http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000"])("rejects production loopback configuration %s before fetching", async (origin) => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_API_URL", origin);

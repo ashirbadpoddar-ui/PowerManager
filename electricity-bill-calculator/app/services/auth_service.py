@@ -54,13 +54,14 @@ def revoke_user_sessions(db: Session, user_id: int) -> None:
 
 
 def set_auth_cookies(response: Response, credentials: SessionCredentials) -> None:
+    response.headers[CSRF_HEADER_NAME] = credentials.csrf_token
     max_age = settings.session_ttl_hours * 60 * 60
     common = {
         "max_age": max_age,
         "expires": credentials.expires_at,
         "path": "/",
         "secure": settings.session_cookie_secure,
-        "samesite": "lax",
+        "samesite": settings.effective_session_cookie_samesite,
     }
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -82,12 +83,12 @@ def clear_auth_cookies(response: Response) -> None:
         path="/",
         secure=settings.session_cookie_secure,
         httponly=True,
-        samesite="lax",
+        samesite=settings.effective_session_cookie_samesite,
     )
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
         path="/",
         secure=settings.session_cookie_secure,
         httponly=False,
-        samesite="lax",
+        samesite=settings.effective_session_cookie_samesite,
     )
